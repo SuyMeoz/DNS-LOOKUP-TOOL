@@ -8,7 +8,11 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using DnsClient;
+using JsonFormatting = Newtonsoft.Json.Formatting;
 using Newtonsoft.Json;
+using System.Net.NetworkInformation;
+using System.Diagnostics;
+
 
 namespace DnsLookupTool
 {
@@ -67,17 +71,16 @@ namespace DnsLookupTool
             InitializeComponent();
             LoadHistory();
             LoadSecuritySettings();
-            ApplyTheming();
+            ApplyTheming(); 
         }
 
         private void InitializeComponent()
         {
-            this.Text = "DNS Lookup Tool v2.0";
+            this.Text = "DNS Lookup Tool";
             this.Size = new Size(900, 650);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.Icon = SystemIcons.Application;
 
-            // Header Panel (đặt dưới cùng)
             headerPanel = new Panel
             {
                 Height = 60,
@@ -119,35 +122,191 @@ namespace DnsLookupTool
 
             this.Controls.Add(headerPanel);
 
-            // Main Tab Control (chiếm toàn bộ phần trên header)
             tabControl = new TabControl
             {
                 Dock = DockStyle.Fill,
                 TabIndex = 0
             };
 
-            // Tab 1: Domain Lookup
             CreateDomainLookupTab();
-
-            // Tab 2: Reverse Lookup
             CreateReverseLookupTab();
-
-            // Tab 3: Multiple Records
             CreateMultipleRecordsTab();
-
-            // Tab 4: Batch Process
             CreateBatchProcessTab();
-
-            // Tab 5: History
             CreateHistoryTab();
-
-            // Tab 6: Settings & Export
             CreateSettingsTab();
+            CreateNetworkToolsTab();
+            CreateWhoisTab();
+            CreateInfoTab();
 
             this.Controls.Add(tabControl);
         }
 
+        // Tab 7
+        private void CreateNetworkToolsTab()
+        {
+            var tabPage = new TabPage { Text = "Network Tools", AutoScroll = true };
+            tabPage.BackColor = Color.White;
 
+            // Ping section
+            var lblPing = new Label
+            {
+                Text = "Ping Test:",
+                Location = new Point(20, 20),
+                Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                AutoSize = true
+            };
+            tabPage.Controls.Add(lblPing);
+
+            var txtPingHost = new TextBox
+            {
+                Location = new Point(20, 50),
+                Size = new Size(200, 30),
+                Font = new Font("Segoe UI", 11),
+                Text = "google.com"
+            };
+            tabPage.Controls.Add(txtPingHost);
+
+            var btnPing = new Button
+            {
+                Text = "🚀 Ping",
+                Location = new Point(230, 50),
+                Size = new Size(100, 30),
+                BackColor = Color.FromArgb(0, 120, 215),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            btnPing.Click += async (s, e) =>
+            {
+                var host = txtPingHost.Text.Trim();
+                if (string.IsNullOrWhiteSpace(host))
+                {
+                    MessageBox.Show("Please enter host to ping", "Input Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                var pingResult = new RichTextBox
+                {
+                    Location = new Point(20, 90),
+                    Size = new Size(500, 150),
+                    Font = new Font("Consolas", 9),
+                    ReadOnly = true
+                };
+
+                // Remove previous ping result if exists
+                var existing = tabPage.Controls.OfType<RichTextBox>().FirstOrDefault(r => r.Name == "pingResult");
+                if (existing != null) tabPage.Controls.Remove(existing);
+
+                pingResult.Name = "pingResult";
+                tabPage.Controls.Add(pingResult);
+
+                try
+                {
+                    pingResult.AppendText($"Pinging {host}...\r\n");
+
+                    var ping = new Ping();
+                    var reply = await ping.SendPingAsync(host, 1000);
+
+                    pingResult.AppendText($"\r\nReply from {reply.Address}: ");
+                    pingResult.AppendText($"bytes={reply.Buffer.Length} ");
+                    pingResult.AppendText($"time={reply.RoundtripTime}ms ");
+                    pingResult.AppendText($"TTL={reply.Options?.Ttl ?? 0}\r\n");
+
+                    pingResult.AppendText(reply.Status == IPStatus.Success
+                        ? "✅ Ping successful\r\n"
+                        : $"❌ Ping failed: {reply.Status}\r\n");
+                }
+                catch (Exception ex)
+                {
+                    pingResult.AppendText($"❌ Error: {ex.Message}\r\n");
+                }
+            };
+            tabPage.Controls.Add(btnPing);
+
+            // Traceroute section
+            var lblTrace = new Label
+            {
+                Text = "Traceroute:",
+                Location = new Point(20, 260),
+                Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                AutoSize = true
+            };
+            tabPage.Controls.Add(lblTrace);
+
+            var txtTraceHost = new TextBox
+            {
+                Location = new Point(20, 290),
+                Size = new Size(200, 30),
+                Font = new Font("Segoe UI", 11),
+                Text = "google.com"
+            };
+            tabPage.Controls.Add(txtTraceHost);
+
+            var btnTrace = new Button
+            {
+                Text = "🔄 Trace",
+                Location = new Point(230, 290),
+                Size = new Size(100, 30),
+                BackColor = Color.FromArgb(156, 39, 176),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            btnTrace.Click += async (s, e) =>
+            {
+                var host = txtTraceHost.Text.Trim();
+                if (string.IsNullOrWhiteSpace(host))
+                {
+                    MessageBox.Show("Please enter host to trace", "Input Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                var traceResult = new RichTextBox
+                {
+                    Location = new Point(20, 330),
+                    Size = new Size(500, 200),
+                    Font = new Font("Consolas", 9),
+                    ReadOnly = true
+                };
+
+                // Remove previous trace result if exists
+                var existing = tabPage.Controls.OfType<RichTextBox>().FirstOrDefault(r => r.Name == "traceResult");
+                if (existing != null) tabPage.Controls.Remove(existing);
+
+                traceResult.Name = "traceResult";
+                tabPage.Controls.Add(traceResult);
+
+                traceResult.AppendText($"Tracing route to {host}...\r\n");
+
+                await Task.Run(() =>
+                {
+                    var process = new Process
+                    {
+                        StartInfo = new ProcessStartInfo
+                        {
+                            FileName = "tracert",
+                            Arguments = host,
+                            UseShellExecute = false,
+                            RedirectStandardOutput = true,
+                            CreateNoWindow = true
+                        }
+                    };
+
+                    process.Start();
+
+                    while (!process.StandardOutput.EndOfStream)
+                    {
+                        var line = process.StandardOutput.ReadLine();
+                        traceResult.Invoke(new Action(() => traceResult.AppendText(line + "\r\n")));
+                    }
+
+                    process.WaitForExit();
+                });
+            };
+            tabPage.Controls.Add(btnTrace);
+
+            tabControl.TabPages.Add(tabPage);
+        }
+
+        // Tab 1
         private void CreateDomainLookupTab()
         {
             var tabPage = new TabPage { Text = "A/AAAA Lookup", AutoScroll = true };
@@ -204,6 +363,7 @@ namespace DnsLookupTool
             tabControl.TabPages.Add(tabPage);
         }
 
+        // Tab 2
         private void CreateReverseLookupTab()
         {
             var tabPage = new TabPage { Text = "PTR Lookup", AutoScroll = true };
@@ -250,6 +410,7 @@ namespace DnsLookupTool
             tabControl.TabPages.Add(tabPage);
         }
 
+        // Tab 3
         private void CreateMultipleRecordsTab()
         {
             var tabPage = new TabPage { Text = "DNS Records", AutoScroll = true };
@@ -315,6 +476,7 @@ namespace DnsLookupTool
             tabControl.TabPages.Add(tabPage);
         }
 
+        // Tab 4
         private void CreateBatchProcessTab()
         {
             var tabPage = new TabPage { Text = "Batch Process", AutoScroll = true };
@@ -381,6 +543,7 @@ namespace DnsLookupTool
             tabControl.TabPages.Add(tabPage);
         }
 
+        // Tab 5
         private void CreateHistoryTab()
         {
             var tabPage = new TabPage { Text = "History", AutoScroll = true };
@@ -422,6 +585,7 @@ namespace DnsLookupTool
             tabControl.TabPages.Add(tabPage);
         }
 
+        // Tab 6
         private void CreateSettingsTab()
         {
             var tabPage = new TabPage { Text = "Settings & Export", AutoScroll = true };
@@ -511,10 +675,95 @@ namespace DnsLookupTool
             tabControl.TabPages.Add(tabPage);
         }
 
+        // Tab 9
+        private void CreateInfoTab()
+        {
+            var tabPage = new TabPage { Text = "About", AutoScroll = true };
+            tabPage.BackColor = Color.White;
+
+            var panel = new Panel
+            {
+                Location = new Point(50, 50),
+                Size = new Size(500, 400),
+                BorderStyle = BorderStyle.None
+            };
+
+            var lblTitle = new Label
+            {
+                Text = "🌐 DNS Lookup Tool",
+                Font = new Font("Segoe UI", 24, FontStyle.Bold),
+                ForeColor = Color.FromArgb(0, 120, 215),
+                AutoSize = true,
+                Location = new Point(0, 0)
+            };
+
+            var lblAuthor = new Label
+            {
+                Text = "Created by: Hoang Hao Hung [ MUOP THE LO ]",
+                Font = new Font("Segoe UI", 14, FontStyle.Regular),
+                ForeColor = Color.Black,
+                AutoSize = true,
+                Location = new Point(0, 50)
+            };
+
+            var lblVersion = new Label
+            {
+                Text = "Version: 2.0",
+                Font = new Font("Segoe UI", 12, FontStyle.Regular),
+                ForeColor = Color.Gray,
+                AutoSize = true,
+                Location = new Point(0, 90)
+            };
+
+            var lblFeatures = new Label
+            {
+                Text = "Features:\n• DNS Lookup (A, AAAA, MX, TXT, etc.)" +
+                "\n• Reverse DNS (PTR)\n• Batch Processing\n• Network Tools\n• Export Results\n• Query History\n• Who Is Tool",
+                Font = new Font("Segoe UI", 11, FontStyle.Regular),
+                ForeColor = Color.Black,
+                AutoSize = false,
+                Size = new Size(450, 200),
+                Location = new Point(0, 130)
+            };
+
+            panel.Controls.Add(lblTitle);
+            panel.Controls.Add(lblAuthor);
+            panel.Controls.Add(lblVersion);
+            panel.Controls.Add(lblFeatures);
+
+            tabPage.Controls.Add(panel);
+            tabControl.TabPages.Add(tabPage);
+        }
+
         private void ApplyTheming()
         {
             // Modern dark theme for better UX
-            this.BackColor = Color.FromArgb(240, 240, 240);
+            this.BackColor = Color.FromArgb(30, 30, 30);
+
+            // Style all buttons consistently
+            var buttons = this.Controls.OfType<Button>()
+                .Concat(tabControl.TabPages.Cast<TabPage>()
+                    .SelectMany(tp => tp.Controls.OfType<Button>()));
+
+            foreach (var btn in buttons)
+            {
+                btn.FlatStyle = FlatStyle.Flat;
+                btn.FlatAppearance.BorderSize = 0;
+                btn.Cursor = Cursors.Hand;
+                btn.Font = new Font("Segoe UI", 10);
+            }
+
+            // Style textboxes
+            var textboxes = this.Controls.OfType<TextBox>()
+                .Concat(tabControl.TabPages.Cast<TabPage>()
+                    .SelectMany(tp => tp.Controls.OfType<TextBox>()));
+
+            foreach (var txt in textboxes)
+            {
+                txt.BackColor = Color.FromArgb(45, 45, 48);
+                txt.ForeColor = Color.White;
+                txt.BorderStyle = BorderStyle.FixedSingle;
+            }
         }
 
         // Event Handlers
@@ -571,7 +820,10 @@ namespace DnsLookupTool
             }
 
             rtbReverseResults.Clear();
-            rtbReverseResults.AppendText("Resolving...\r\n");
+            rtbReverseResults.AppendText($"🔍 Reverse DNS Lookup\r\n");
+            rtbReverseResults.AppendText($"Target: {ip}\r\n");
+            rtbReverseResults.AppendText($"Time: {DateTime.Now:HH:mm:ss}\r\n");
+            rtbReverseResults.AppendText("─".PadRight(50, '─') + "\r\n\r\n");
 
             try
             {
@@ -580,21 +832,55 @@ namespace DnsLookupTool
                 var result = await client.QueryReverseAsync(ip);
                 sw.Stop();
 
-                rtbReverseResults.Clear();
-                var ptr = result.Answers.OfType<DnsClient.Protocol.PtrRecord>().FirstOrDefault();
-                var hostName = ptr?.PtrDomainName?.ToString() ?? "Not found";
+                var ptrRecords = result.Answers.OfType<DnsClient.Protocol.PtrRecord>().ToList();
 
-                rtbReverseResults.AppendText($"IP: {ip}\r\n");
-                rtbReverseResults.AppendText($"Hostname: {hostName}\r\n");
-                rtbReverseResults.AppendText($"Time: {sw.ElapsedMilliseconds}ms\r\n");
+                if (ptrRecords.Count == 0)
+                {
+                    rtbReverseResults.AppendText("❌ No reverse DNS records found\r\n\r\n");
+                    rtbReverseResults.AppendText($"Technical details:\r\n");
+                    rtbReverseResults.AppendText($"• Query: {GetReverseQueryFormat(ip)}\r\n");
+                    rtbReverseResults.AppendText($"• DNS Server: {(CustomDnsServer?.ToString() ?? "System Default")}\r\n");
+                    rtbReverseResults.AppendText($"• Response time: {sw.ElapsedMilliseconds}ms\r\n");
+                }
+                else
+                {
+                    rtbReverseResults.AppendText($"✅ Found {ptrRecords.Count} PTR record(s):\r\n\r\n");
 
-                SaveToHistory("PTR", ip.ToString(), sw.ElapsedMilliseconds, hostName);
+                    foreach (var ptr in ptrRecords)
+                    {
+                        var hostname = ptr.PtrDomainName?.ToString() ?? "Unknown";
+                        rtbReverseResults.AppendText($"📌 Hostname: {hostname}\r\n");
+                        rtbReverseResults.AppendText($"   • Domain: {ptr.DomainName}\r\n");
+                        rtbReverseResults.AppendText($"   • TTL: {ptr.TimeToLive} seconds\r\n");
+                        rtbReverseResults.AppendText("\r\n");
+                    }
+
+                    rtbReverseResults.AppendText($"📊 Summary:\r\n");
+                    rtbReverseResults.AppendText($"• Query time: {sw.ElapsedMilliseconds}ms\r\n");
+                    rtbReverseResults.AppendText($"• DNS Server: {(CustomDnsServer?.ToString() ?? "System Default")}\r\n");
+                }
+
+                rtbReverseResults.AppendText("─".PadRight(50, '─') + "\r\n");
+                rtbReverseResults.AppendText($"Completed at {DateTime.Now:HH:mm:ss}\r\n");
+
+                SaveToHistory("PTR", ip.ToString(), sw.ElapsedMilliseconds,
+                    ptrRecords.Count > 0 ?
+                    string.Join(", ", ptrRecords.Select(p => p.PtrDomainName?.ToString())) :
+                    "No PTR records");
                 RefreshHistory();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error: {ex.Message}", "Reverse Lookup Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                rtbReverseResults.AppendText($"\r\n❌ Error: {ex.Message}\r\n");
             }
+        }
+
+        // Hàm hỗ trợ BtnReverseIp_Click
+        private string GetReverseQueryFormat(IPAddress ip)
+        {
+            var bytes = ip.GetAddressBytes();
+            Array.Reverse(bytes); 
+            return $"{string.Join(".", bytes)}.in-addr.arpa";
         }
 
         private async void BtnQueryMulti_Click(object? sender, EventArgs e)
@@ -606,7 +892,9 @@ namespace DnsLookupTool
                 return;
             }
 
-            var recordType = GetQueryType(cmbRecordType.SelectedItem?.ToString() ?? "A");
+            var recordTypeStr = cmbRecordType.SelectedItem?.ToString() ?? "A";
+            var recordType = GetQueryType(recordTypeStr);
+
             rtbMultiResults.Clear();
             rtbMultiResults.AppendText("Querying...\r\n");
 
@@ -614,26 +902,57 @@ namespace DnsLookupTool
             {
                 var client = CreateLookupClient();
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                var result = await client.QueryAsync(query, recordType);
-                sw.Stop();
 
-                rtbMultiResults.Clear();
-
-                if (result.Answers.Count == 0)
+                // Nếu là IP và loại record là PTR, thực hiện reverse lookup
+                if (IPAddress.TryParse(query, out var ipAddress))
                 {
-                    rtbMultiResults.AppendText("No records found\r\n");
-                    return;
+                    if (recordType == QueryType.PTR)
+                    {
+                        var result = await client.QueryReverseAsync(ipAddress);
+                        sw.Stop();
+
+                        rtbMultiResults.Clear();
+                        if (result.Answers.Count == 0)
+                        {
+                            rtbMultiResults.AppendText("No PTR records found\r\n");
+                            return;
+                        }
+
+                        foreach (var answer in result.Answers.OfType<DnsClient.Protocol.PtrRecord>())
+                        {
+                            rtbMultiResults.AppendText($"• PTR: {answer.PtrDomainName}\r\n");
+                        }
+                    }
+                    else
+                    {
+                        rtbMultiResults.Clear();
+                        rtbMultiResults.AppendText($"❌ Error: IP addresses can only be used for PTR lookups\r\n");
+                        rtbMultiResults.AppendText($"   Please select 'PTR' record type for IP addresses\r\n");
+                        return;
+                    }
                 }
-
-                foreach (var answer in result.Answers)
+                else
                 {
-                    string recordStr = FormatRecord(recordType, answer);
-                    rtbMultiResults.AppendText($"• {recordStr}\r\n");
+                    // Nếu là domain, thực hiện lookup bình thường
+                    var result = await client.QueryAsync(query, recordType);
+                    sw.Stop();
+
+                    rtbMultiResults.Clear();
+                    if (result.Answers.Count == 0)
+                    {
+                        rtbMultiResults.AppendText("No records found\r\n");
+                        return;
+                    }
+
+                    foreach (var answer in result.Answers)
+                    {
+                        string recordStr = FormatRecord(recordType, answer);
+                        rtbMultiResults.AppendText($"• {recordStr}\r\n");
+                    }
                 }
 
                 rtbMultiResults.AppendText($"\r\nTime: {sw.ElapsedMilliseconds}ms\r\n");
-
-                SaveToHistory(recordType.ToString() ?? "Unknown", query, sw.ElapsedMilliseconds, "");
+                SaveToHistory(recordTypeStr, query, sw.ElapsedMilliseconds, "");
                 RefreshHistory();
             }
             catch (Exception ex)
@@ -726,15 +1045,44 @@ namespace DnsLookupTool
 
         private void BtnExportResults_Click(object? sender, EventArgs e)
         {
-            using (var sfd = new SaveFileDialog { Filter = "Text Files (*.txt)|*.txt|CSV Files (*.csv)|*.csv" })
+            using (var sfd = new SaveFileDialog
+            {
+                Filter = "Text Files (*.txt)|*.txt|CSV Files (*.csv)|*.csv|JSON Files (*.json)|*.json|HTML Report (*.html)|*.html",
+                Title = "Export Results"
+            })
             {
                 if (sfd.ShowDialog() == DialogResult.OK)
                 {
                     try
                     {
-                        var lines = QueryHistory.Select(h => $"{h.Type}\t{h.Query}\t{h.Timestamp}\t{h.ElapsedMs}ms");
-                        File.WriteAllLines(sfd.FileName, lines);
-                        MessageBox.Show("Export successful!", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        var ext = Path.GetExtension(sfd.FileName).ToLower();
+
+                        switch (ext)
+                        {
+                            case ".csv":
+                                var csvLines = QueryHistory.Select(h =>
+                                    $"\"{h.Type}\",\"{h.Query}\",\"{h.Timestamp:yyyy-MM-dd HH:mm:ss}\",{h.ElapsedMs},\"{h.Details}\"");
+                                File.WriteAllLines(sfd.FileName, new[] { "Type,Query,Timestamp,ElapsedMs,Details" }.Concat(csvLines));
+                                break;
+
+                            case ".json":
+                                var json = JsonConvert.SerializeObject(QueryHistory, Formatting.Indented);
+                                File.WriteAllText(sfd.FileName, json);
+                                break;
+
+                            case ".html":
+                                GenerateHtmlReport(sfd.FileName);
+                                break;
+
+                            default: // .txt
+                                var lines = QueryHistory.Select(h =>
+                                    $"{h.Type}\t{h.Query}\t{h.Timestamp:yyyy-MM-dd HH:mm:ss}\t{h.ElapsedMs}ms\t{h.Details}");
+                                File.WriteAllLines(sfd.FileName, lines);
+                                break;
+                        }
+
+                        MessageBox.Show($"Export successful to {Path.GetFileName(sfd.FileName)}",
+                            "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
                     }
                     catch (Exception ex)
                     {
@@ -742,6 +1090,58 @@ namespace DnsLookupTool
                     }
                 }
             }
+        }
+
+        // Xuất báo cáo dưới dạng Html
+        private void GenerateHtmlReport(string filePath)
+        {
+            var htmlTemplate = @"<!DOCTYPE html>
+                <html>
+                <head>
+                    <title>DNS Lookup Report</title>
+                    <style>
+                        body {{ font-family: Arial, sans-serif; margin: 40px; }}
+                        table {{ border-collapse: collapse; width: 100%; }}
+                        th, td {{ border: 1px solid #ddd; padding: 12px; text-align: left; }}
+                        th {{ background-color: #4CAF50; color: white; }}
+                        tr:nth-child(even) {{ background-color: #f2f2f2; }}
+                        .summary {{ background-color: #e7f3fe; padding: 20px; margin-bottom: 20px; }}
+                        .timestamp {{ color: #666; font-size: 12px; }}
+                    </style>
+                </head>
+                <body>
+                    <h1>DNS Lookup Tool Report</h1>
+                    <div class='summary'>
+                        <strong>Generated:</strong> {0:yyyy-MM-dd HH:mm:ss}<br>
+                        <strong>Total Queries:</strong> {1}<br>
+                        <strong>Period:</strong> {2:yyyy-MM-dd} to {3:yyyy-MM-dd}
+                    </div>
+                    <table>
+                        <tr>
+                            <th>Type</th><th>Query</th><th>Timestamp</th><th>Time (ms)</th><th>Details</th>
+                        </tr>
+                        {4}
+                    </table>
+                </body>
+                </html>";
+
+            var rows = string.Join("", QueryHistory.Select(h => $@"
+                <tr>
+                    <td>{h.Type}</td>
+                    <td>{h.Query}</td>
+                    <td>{h.Timestamp:yyyy-MM-dd HH:mm:ss}</td>
+                    <td>{h.ElapsedMs}</td>
+                    <td>{h.Details}</td>
+                </tr>"));
+
+            var html = string.Format(htmlTemplate,
+                DateTime.Now,
+                QueryHistory.Count,
+                QueryHistory.Min(h => h.Timestamp),
+                QueryHistory.Max(h => h.Timestamp),
+                rows);
+
+            File.WriteAllText(filePath, html);
         }
 
         private void BtnGenerateReport_Click(object? sender, EventArgs e)
@@ -822,10 +1222,32 @@ namespace DnsLookupTool
 
         private LookupClient CreateLookupClient()
         {
-            var options = CustomDnsServer != null
-                ? new LookupClientOptions(CustomDnsServer) { Timeout = Timeout, Retries = RetryCount }
-                : new LookupClientOptions { Timeout = Timeout, Retries = RetryCount };
-            return new LookupClient(options);
+            try
+            {
+                var options = CustomDnsServer != null
+                    ? new LookupClientOptions(CustomDnsServer)
+                    {
+                        Timeout = Timeout,
+                        Retries = RetryCount,
+                        UseTcpOnly = ForceTcpOnly,
+                        EnableAuditTrail = true
+                    }
+                    : new LookupClientOptions
+                    {
+                        Timeout = Timeout,
+                        Retries = RetryCount,
+                        UseTcpOnly = ForceTcpOnly,
+                        EnableAuditTrail = true
+                    };
+
+                return new LookupClient(options);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to create DNS client: {ex.Message}", "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                throw;
+            }
         }
 
         private void SaveToHistory(string type, string query, long elapsedMs, string details)
@@ -880,7 +1302,7 @@ namespace DnsLookupTool
             try
             {
                 var obj = new { ForceTcpOnly, EnableDnsSec };
-                var json = JsonConvert.SerializeObject(obj, Formatting.Indented);
+                var json = JsonConvert.SerializeObject(obj, JsonFormatting.Indented);
                 File.WriteAllText(SecuritySettingsFile, json);
             }
             catch { }
@@ -914,9 +1336,110 @@ namespace DnsLookupTool
             SaveSecuritySettings();
             base.Dispose(disposing);
         }
+
+        private async Task<string> QueryWhois(string domain)
+        {
+            try
+            {
+                using var client = new System.Net.Sockets.TcpClient();
+                await client.ConnectAsync("whois.iana.org", 43);
+
+                using var stream = client.GetStream();
+                using var writer = new StreamWriter(stream);
+                using var reader = new StreamReader(stream);
+
+                await writer.WriteLineAsync(domain);
+                await writer.FlushAsync();
+
+                var result = await reader.ReadToEndAsync();
+                return result;
+            }
+            catch
+            {
+                return "Whois lookup failed";
+            }
+        }
+
+        // Tab 8
+        private void CreateWhoisTab()
+        {
+            var tabPage = new TabPage { Text = "Whois Lookup", AutoScroll = true };
+            tabPage.BackColor = Color.White;
+
+            var lblInput = new Label
+            {
+                Text = "Domain or IP for Whois:",
+                Location = new Point(20, 20),
+                Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                AutoSize = true
+            };
+            tabPage.Controls.Add(lblInput);
+
+            var txtWhoisQuery = new TextBox
+            {
+                Location = new Point(20, 50),
+                Size = new Size(300, 30),
+                Font = new Font("Segoe UI", 11),
+                Text = "example.com"
+            };
+            tabPage.Controls.Add(txtWhoisQuery);
+
+            var btnWhois = new Button
+            {
+                Text = "🔍 Whois",
+                Location = new Point(330, 50),
+                Size = new Size(100, 30),
+                BackColor = Color.FromArgb(76, 175, 80),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            btnWhois.Click += async (s, e) =>
+            {
+                var query = txtWhoisQuery.Text.Trim();
+                if (string.IsNullOrWhiteSpace(query))
+                {
+                    MessageBox.Show("Please enter a domain or IP", "Input Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                var whoisResult = new RichTextBox
+                {
+                    Location = new Point(20, 90),
+                    Size = new Size(500, 350),
+                    Font = new Font("Consolas", 9),
+                    ReadOnly = true
+                };
+
+                // Xoa ban ghi truoc neu da ton tai
+                var existing = tabPage.Controls.OfType<RichTextBox>().FirstOrDefault(r => r.Name == "whoisResult");
+                if (existing != null) tabPage.Controls.Remove(existing);
+
+                whoisResult.Name = "whoisResult";
+                tabPage.Controls.Add(whoisResult);
+
+                whoisResult.AppendText($"Querying Whois for: {query}\r\n");
+                whoisResult.AppendText("=".PadRight(60, '=') + "\r\n");
+
+                try
+                {
+                    var result = await QueryWhois(query);
+                    whoisResult.AppendText(result);
+
+                    // Lưu vào lịch sử
+                    SaveToHistory("WHOIS", query, 0, $"Whois lookup for {query}");
+                    RefreshHistory();
+                }
+                catch (Exception ex)
+                {
+                    whoisResult.AppendText($"❌ Error: {ex.Message}\r\n");
+                }
+            };
+            tabPage.Controls.Add(btnWhois);
+
+            tabControl.TabPages.Add(tabPage);
+        }
     }
 
-    // Support Classes
     public class HistoryEntry
     {
         public string Type { get; set; } = "";
